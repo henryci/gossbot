@@ -81,6 +81,7 @@ def chatroom_emote(msg, cl, state)
     if match[1] != "gossbot" && match[1] != "gossbot2"          
       respond(msg, cl, "/kick #{match[1]}")
       respond(msg, cl, "#{match[1]} is a jerk.")
+      respond(msg, cl, "Email: #{state[:user_map][match[1]]}") if state[:user_map][match[1]]
 
       # if person was kicked by email re-invite, otherwise look them up first
       if (match[2].include?("@"))
