@@ -124,14 +124,14 @@ def regular_user_chatroom_message(msg, cl, state)
 
     # attempt to reinvite the last user kicked
     if (stmt == "reinvite" && state[:last_kicked_email])
-      respond(msg, cl, "/invite #{state[:last_kicked_email]}")
+      invite_user(state[:last_kicked_email], msg, cl, state)
       return
     end
 
     # attempt to reinvite a user
     if (match = /^reinvite (.*)/.match(stmt))
-      if(match.length > 0 && state[:user_map] && state[:user_map][match[1]])
-        respond(msg, cl, "/invite #{state[:user_map][match[1]]}")
+      if(match.length > 0)
+        invite_user(match[1], msg, cl, state)
         return
       end
     end
@@ -167,7 +167,6 @@ def regular_user_chatroom_message(msg, cl, state)
       end
       return
     end
-
 
     # answer "who is" questions
     if (match = /^who is (.*)/.match(stmt))
