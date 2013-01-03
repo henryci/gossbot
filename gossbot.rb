@@ -79,26 +79,38 @@ def chatroom_emote(msg, cl, state)
   # handle users being kicked     
   if (match = /(\S*) kicked (\S*)/.match(body))
     out("User was kicked. match: #{match.inspect}")
+    kick_user(match[1], msg, cl, state)        
+    invite_user(match[2], msg, cl, state)
+  end
+end
 
-    if match[1] != "gossbot" && match[1] != "gossbot2"          
-      respond(msg, cl, "/kick #{match[1]}")
-      respond(msg, cl, "#{match[1]} is a jerk.")
+def kick_user(user, msg, cl, state)
+  return if  (user == "gossbot" || user == "gossbot2")
 
-      # record the email of the kicker for later re-invite purposes
-      if state[:user_map][match[1]]
-        state[:last_kicked_email] = state[:user_map][match[1]]
-        respond(msg, cl, "Email: #{state[:last_kicked_email]}")
-      else
-        state[:last_kicked_email] = nil
-      end
+  # determine if this is a username or email
+  if (user.include?("@"))
+    user_email = user
+  else
+    user_email = state[:user_map][user]
+  end
 
-      # if person was kicked by email re-invite, otherwise look them up first
-      if (match[2].include?("@"))
-        respond(msg, cl, "/invite #{match[2]}")
-      else
-        respond(msg, cl, "/invite #{state[:user_map][match[2]]}") if state[:user_map][match[2]]
-      end
-    end
+  # if we have the user email, prefer that. otherwise just kick the username
+  if (user_email)
+    respond(msg, cl, "/kick #{user_email}")
+    respond(msg, cl, "Email: #{user_email}")
+    state[:last_kicked_email] = user_email
+  else
+    respond(msg, cl, "/kick #{user}")
+    state[:last_kicked_email] = nil
+  end
+end
+
+def invite_user(user, msg, cl, state)
+  # invite the email address directly, if provided. otherwise attempt a lookup
+  if (user.include?("@"))
+    respond(msg, cl, "/invite #{user}")
+  else
+    respond(msg, cl, "/invite #{state[:user_map][user]}") if state[:user_map][match[2]]
   end
 end
 
@@ -125,16 +137,15 @@ def regular_user_chatroom_message(msg, cl, state)
     end
 
     # vote to kick a user
-    if (match = /^!kick (.*)/.match(stmt))
-      # make sure we have the the votee's email
-      if(match.length > 0 && state[:user_map] && state[:user_map][match[1]])
-        # make sure we have the voters email
-        if(person.length && state[:user_map][person])
-          (state[:kick_votes][state[:user_map][match[1]]] ||= Set.new).add(state[:user_map][person])
-          vote_count = state[:kick_votes][state[:user_map][match[1]]].length()
+    if (match = /^kick (.*)/.match(stmt))
+      if(match.length > 0 && state[:user_map])
+        kick_candidate_email = state[:user_map][match[1]]
+        voter_email = state[:user_map][person]
+        if (kick_candidate_email && voter_email)
+          (state[:kick_votes][kick_candidate_email] ||= Set.new).add(voter_email)
+          vote_count = state[:kick_votes][kick_candidate_email].size
           if(vote_count >= REQUIRED_KICK_VOTES)
-            respond(msg, cl, "/kick #{state[:user_map][match[1]]}")
-            state[:kick_votes][state[:user_map][match[1]]] = nil
+            kick_user(kick_candidate_email)
           else
             respond(msg, cl, "#{match[1]} needs #{REQUIRED_KICK_VOTES - vote_count} more vote(s) to be kicked.")
           end
@@ -143,14 +154,14 @@ def regular_user_chatroom_message(msg, cl, state)
       return
     end
 
-    # undo a vote to kick a user
-    if (match = /^!unkick (.*)/.match(stmt))
-      # make sure we have the the votee's email
-      if(match.length > 0 && state[:user_map] && state[:user_map][match[1]])
-        # make sure we have the voters email
-        if(person.length && state[:user_map][person])
-          (state[:kick_votes][state[:user_map][match[1]]]).delete(state[:user_map][person])
-          vote_count = state[:kick_votes][state[:user_map][match[1]]].length()
+    # remove a kick vote for a user
+    if (match = /^unkick (.*)/.match(stmt))
+      if (match.length > 0 && state[:user_map])
+        kick_candidate_email = state[:user_map][match[1]]
+        voter_email = state[:user_map][person]
+        if (kick_candidate_email && voter_email)
+          (state[:kick_votes][kick_candidate_email] ||= Set.new).delete(voter_email)
+          vote_count = state[:kick_votes][kick_candidate_email].size
           respond(msg, cl, "#{match[1]} needs #{REQUIRED_KICK_VOTES - vote_count} more votes to be kicked.")
         end
       end
