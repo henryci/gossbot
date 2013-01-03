@@ -130,7 +130,7 @@ def regular_user_chatroom_message(msg, cl, state)
       if(match.length > 0 && state[:user_map] && state[:user_map][match[1]])
         # make sure we have the voters email
         if(person.length && state[:user_map][person])
-          (state[:kick_votes][state[:user_map][match[1]]]).add(state[:user_map][person])
+          (state[:kick_votes][state[:user_map][match[1]]] ||= Set.new).add(state[:user_map][person])
           vote_count = state[:kick_votes][state[:user_map][match[1]]].length()
           if(vote_count >= REQUIRED_KICK_VOTES)
             respond(msg, cl, "/kick #{state[:user_map][match[1]]}")
@@ -240,7 +240,7 @@ def main
 
   state[:time_until_list] = 0
   state[:user_map] = {}
-  state[:kick_votes] = Hash.new {|h,k| h[k] = Set.new }
+  state[:kick_votes] = {}
   state[:do_speak] = settings[:do_speak]
 
   cl = connect(settings)
