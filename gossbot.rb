@@ -12,12 +12,30 @@ include Jabber
 
 Thread.abort_on_exception=true
 
+# set this to the partychat room you wish to react to
 ROOM_NAME = "MyTestRoom"
+
+# list of aliases that do not get kicked. It is recommended
+# to have two bots in the room so a user can't kick the bot
+INVINCIBLE_ALIASES = ["gossbot", "gossbot2"]
+
+# enables console logging
 DEBUG_OUTPUT = false
+
+# Number of chat messages to receive that cause an refresh of
+# the bots user/email mapping
 MSGS_UNTIL_REFRESH = 50
+
+# chance of speaking randomly is rand(SPEAK_LIKELYHOOD) == 1
 SPEAK_LIKELYHOOD = 500
+
+# random things the bot can say based on SPEAK_LIKELYHOOD
 EXCLAMATIONS = ["Hi guys!", "This sure is a fun time."]
+
+# random actions, which get inserted into: "/me <EMOTE> <user>"
 EMOTES = ["smiles at", "waves at"]
+
+# number of kick votes a user needs before the bot kicks them
 REQUIRED_KICK_VOTES = 3
 
 # Responds to the sender of a message with a new message
@@ -67,7 +85,7 @@ def chatroom_emote(msg, cl, state)
   body = msg.body.to_s
   body = body[1..body.length - 2]
    
-  # Being invited back to a chat room: '_henry invited gossbot2@gmail.com_' 
+  # Being invited back to a chat room: '_henry invited thisbot@gmail.com_' 
   if(match = /^(.*) invited you to '#{ROOM_NAME}'/.match(body))
     out("coming back after being kicked")
     respond(msg, cl, "hello again")
@@ -83,7 +101,7 @@ def chatroom_emote(msg, cl, state)
 end
 
 def kick_user(user, msg, cl, state)
-  return if  (user == "gossbot" || user == "gossbot2")
+  return if (INVINCIBLE_ALIASES.index(user) != nil)
 
   # determine if this is a username or email
   if (user.include?("@"))
