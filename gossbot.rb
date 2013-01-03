@@ -9,6 +9,7 @@ $:.unshift '../../../../../lib'
 require 'rubygems'
 require 'time'
 require 'xmpp4r/client'
+require 'set'
 include Jabber
 
 Thread.abort_on_exception=true
@@ -19,6 +20,7 @@ MSGS_UNTIL_REFRESH = 50
 SPEAK_LIKELYHOOD = 500
 EXCLAMATIONS = ["Hi guys!", "This sure is a fun time."]
 EMOTES = ["smiles at", "waves at"]
+REQUIRED_KICK_VOTES = 3
 
 # Responds to the sender of a message with a new message
 def respond(m, cl, msg)
@@ -122,6 +124,40 @@ def regular_user_chatroom_message(msg, cl, state)
       end
     end
 
+    # vote to kick a user
+    if (match = /^!kick (.*)/.match(stmt))
+      # make sure we have the the votee's email
+      if(match.length > 0 && state[:user_map] && state[:user_map][match[1]])
+        # make sure we have the voters email
+        if(person.length && state[:user_map][person])
+          (state[:kick_votes][state[:user_map][match[1]]]).add(state[:user_map][person])
+          vote_count = state[:kick_votes][state[:user_map][match[1]]].length()
+          if(vote_count >= REQUIRED_KICK_VOTES)
+            respond(msg, cl, "/kick #{state[:user_map][match[1]]}")
+            state[:kick_votes][state[:user_map][match[1]]] = nil
+          else
+            respond(msg, cl, "#{match[1]} needs #{REQUIRED_KICK_VOTES - vote_count} more vote(s) to be kicked.")
+          end
+        end
+      end
+      return
+    end
+
+    # undo a vote to kick a user
+    if (match = /^!unkick (.*)/.match(stmt))
+      # make sure we have the the votee's email
+      if(match.length > 0 && state[:user_map] && state[:user_map][match[1]])
+        # make sure we have the voters email
+        if(person.length && state[:user_map][person])
+          (state[:kick_votes][state[:user_map][match[1]]]).delete(state[:user_map][person])
+          vote_count = state[:kick_votes][state[:user_map][match[1]]].length()
+          respond(msg, cl, "#{match[1]} needs #{REQUIRED_KICK_VOTES - vote_count} more votes to be kicked.")
+        end
+      end
+      return
+    end
+
+
     # answer "who is" questions
     if (match = /^who is (.*)/.match(stmt))
       if(match.length > 0 && state[:user_map] && state[:user_map][match[1]])
@@ -204,6 +240,7 @@ def main
 
   state[:time_until_list] = 0
   state[:user_map] = {}
+  state[:kick_votes] = Hash.new {|h,k| h[k] = Set.new }
   state[:do_speak] = settings[:do_speak]
 
   cl = connect(settings)
