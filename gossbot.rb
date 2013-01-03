@@ -81,7 +81,14 @@ def chatroom_emote(msg, cl, state)
     if match[1] != "gossbot" && match[1] != "gossbot2"          
       respond(msg, cl, "/kick #{match[1]}")
       respond(msg, cl, "#{match[1]} is a jerk.")
-      respond(msg, cl, "Email: #{state[:user_map][match[1]]}") if state[:user_map][match[1]]
+
+      # record the email of the kicker for later re-invite purposes
+      if state[:user_map][match[1]]
+        state[:last_kicked_email] = state[:user_map][match[1]]
+        respond(msg, cl, "Email: #{state[:last_kicked_email]}")
+      else
+        state[:last_kicked_email] = nil
+      end
 
       # if person was kicked by email re-invite, otherwise look them up first
       if (match[2].include?("@"))
@@ -95,16 +102,29 @@ end
 
 def regular_user_chatroom_message(msg, cl, state)
   return if !state[:do_speak] # some bots should be seen and not heard
-
   body = msg.body.to_s
 
   if(match = /\[(\S*)\] (.*)/.match(body))
     person = match[1]
     stmt = match[2]
 
+    # attempt to reinvite the last user kicked
+    if (stmt == "reinvite" && state[:last_kicked_email])
+      respond(msg, cl, "/invite #{state[:last_kicked_email]}")
+      return
+    end
+
+    # attempt to reinvite a user
+    if (match = /^reinvite (.*)/.match(stmt))
+      if(match.length > 0 && state[:user_map] && state[:user_map][match[1]])
+        respond(msg, cl, "/invite #{state[:user_map][match[1]]}")
+        return
+      end
+    end
+
     # answer "who is" questions
     if (match = /^who is (.*)/.match(stmt))
-      if(match.length > 1 && state[:user_map] && state[:user_map][match[1]])
+      if(match.length > 0 && state[:user_map] && state[:user_map][match[1]])
         respond(msg, cl, "#{match[1]} is #{state[:user_map][match[1]]}")
         return
       end
