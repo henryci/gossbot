@@ -7,6 +7,7 @@
 require 'rubygems'
 require 'time'
 require 'xmpp4r/client'
+require 'set'
 include Jabber
 
 Thread.abort_on_exception=true
@@ -17,6 +18,7 @@ MSGS_UNTIL_REFRESH = 50
 SPEAK_LIKELYHOOD = 500
 EXCLAMATIONS = ["Hi guys!", "This sure is a fun time."]
 EMOTES = ["smiles at", "waves at"]
+REQUIRED_KICK_VOTES = 3
 
 # Responds to the sender of a message with a new message
 def respond(m, cl, msg)
@@ -75,33 +77,98 @@ def chatroom_emote(msg, cl, state)
   # handle users being kicked     
   if (match = /(\S*) kicked (\S*)/.match(body))
     out("User was kicked. match: #{match.inspect}")
+    kick_user(match[1], msg, cl, state)        
+    invite_user(match[2], msg, cl, state)
+  end
+end
 
-    if match[1] != "gossbot" && match[1] != "gossbot2"          
-      respond(msg, cl, "/kick #{match[1]}")
-      respond(msg, cl, "#{match[1]} is a jerk.")
+def kick_user(user, msg, cl, state)
+  return if  (user == "gossbot" || user == "gossbot2")
 
-      # if person was kicked by email re-invite, otherwise look them up first
-      if (match[2].include?("@"))
-        respond(msg, cl, "/invite #{match[2]}")
-      else
-        respond(msg, cl, "/invite #{state[:user_map][match[2]]}") if state[:user_map][match[2]]
-      end
-    end
+  # determine if this is a username or email
+  if (user.include?("@"))
+    user_email = user
+  else
+    user_email = state[:user_map][user]
+  end
+
+  # if we have the user email, prefer that. otherwise just kick the username
+  if (user_email)
+    respond(msg, cl, "/kick #{user_email}")
+    respond(msg, cl, "Email: #{user_email}")
+    state[:last_kicked_email] = user_email
+  else
+    respond(msg, cl, "/kick #{user}")
+    state[:last_kicked_email] = nil
+  end
+end
+
+def invite_user(user, msg, cl, state)
+  # invite the email address directly, if provided. otherwise attempt a lookup
+  if (user.include?("@"))
+    respond(msg, cl, "/invite #{user}")
+  else
+    respond(msg, cl, "/invite #{state[:user_map][user]}") if state[:user_map][user]
   end
 end
 
 def regular_user_chatroom_message(msg, cl, state)
   return if !state[:do_speak] # some bots should be seen and not heard
-
   body = msg.body.to_s
 
   if(match = /\[(\S*)\] (.*)/.match(body))
     person = match[1]
     stmt = match[2]
 
+    # attempt to reinvite the last user kicked
+    if (stmt == "reinvite" && state[:last_kicked_email])
+      invite_user(state[:last_kicked_email], msg, cl, state)
+      return
+    end
+
+    # attempt to reinvite a user
+    if (match = /^reinvite (.*)/.match(stmt))
+      if(match.length > 0)
+        invite_user(match[1], msg, cl, state)
+        return
+      end
+    end
+
+    # vote to kick a user
+    if (match = /^kick (.*)/.match(stmt))
+      if(match.length > 0 && state[:user_map])
+        kick_candidate_email = state[:user_map][match[1]]
+        voter_email = state[:user_map][person]
+        if (kick_candidate_email && voter_email)
+          (state[:kick_votes][kick_candidate_email] ||= Set.new).add(voter_email)
+          vote_count = state[:kick_votes][kick_candidate_email].size
+          if(vote_count >= REQUIRED_KICK_VOTES)
+            kick_user(kick_candidate_email)
+          else
+            respond(msg, cl, "#{match[1]} needs #{REQUIRED_KICK_VOTES - vote_count} more vote(s) to be kicked.")
+          end
+        end
+      end
+      return
+    end
+
+    # remove a kick vote for a user
+    if (match = /^unkick (.*)/.match(stmt))
+      if (match.length > 0 && state[:user_map])
+        kick_candidate_email = state[:user_map][match[1]]
+        voter_email = state[:user_map][person]
+        if (kick_candidate_email && voter_email)
+          (state[:kick_votes][kick_candidate_email] ||= Set.new).delete(voter_email)
+          vote_count = state[:kick_votes][kick_candidate_email].size
+          respond(msg, cl, "#{match[1]} needs #{REQUIRED_KICK_VOTES - vote_count} more votes to be kicked.")
+        end
+      end
+      return
+    end
+
     # answer "who is" questions
     if (match = /^who is (.*)/.match(stmt))
-      if(match.length > 1 && state[:user_map] && state[:user_map][match[1]])
+      if(match.length > 0 && state[:user_map] && state[:user_map][match[1]])
         respond(msg, cl, "#{match[1]} is #{state[:user_map][match[1]]}")
         return
       end
@@ -181,6 +248,7 @@ def main
 
   state[:time_until_list] = 0
   state[:user_map] = {}
+  state[:kick_votes] = {}
   state[:do_speak] = settings[:do_speak]
 
   cl = connect(settings)
