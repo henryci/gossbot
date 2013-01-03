@@ -110,7 +110,7 @@ def invite_user(user, msg, cl, state)
   if (user.include?("@"))
     respond(msg, cl, "/invite #{user}")
   else
-    respond(msg, cl, "/invite #{state[:user_map][user]}") if state[:user_map][match[2]]
+    respond(msg, cl, "/invite #{state[:user_map][user]}") if state[:user_map][user]
   end
 end
 
