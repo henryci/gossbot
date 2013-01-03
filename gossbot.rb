@@ -4,8 +4,6 @@
 # GossBot is a xmpp chat bot designed to live in a PartyChat (http://partychapp.appspot.com/) room
 # GossBot reinvites anybody who has been kicked (and kicks the kicker), answers questions, and occassionally speaks
 
-$:.unshift '../../../../../lib'
-
 require 'rubygems'
 require 'time'
 require 'xmpp4r/client'
