@@ -129,45 +129,46 @@ def chatroom_message(msg, cl, state)
   
   # update room status every MSGS_UNTIL_REFRESH messages
   # Use a countdown and not mod to avoid skips happenning if multiple messages come at once
-  # if(state[:time_until_list] <= 0)
-  #   respond(msg, cl, "/list")
-  #   state[:time_until_list] = MSGS_UNTIL_REFRESH
-  # else
-  #   state[:time_until_list] -= 1
-  # end
+  if(state[:time_until_list] <= 0)
+    respond(msg, cl, "/list")
+    state[:time_until_list] = MSGS_UNTIL_REFRESH
+  else
+    state[:time_until_list] -= 1
+  end
 
-  # # redo the /list whenever anybody changes their name or joins the room
-  # if(/^\'(.*)\' is now known as \'(.*)\'/.match(body) ||
-  #    /^.* has joined the channel with the alias '.*'/.match(body) )
-  #      out("sending /list because of user change")
-  #      respond(msg, cl, "/list")
-  #      return
-  # end
+  # redo the /list whenever anybody changes their name or joins the room
+  if(/^\'(.*)\' is now known as \'(.*)\'/.match(body) ||
+     /^.* has joined the channel with the alias '.*'/.match(body) )
+       out("sending /list because of user change")
+       respond(msg, cl, "/list")
+       return
+  end
   
-  # # handle /list result when it comes in
-  # if(/^Listing members of '#{ROOM_NAME}'\n/.match(body))
-  #   out("received a room listing.")
-  #   listing_refresh(state, body)
-  #   return
-  #  end 
+  # handle /list result when it comes in
+  if(/^Listing members of '#{ROOM_NAME}'\n/.match(body))
+    out("received a room listing.")
+    listing_refresh(state, body)
+    return
+   end 
   
-  # # messages starting and ending with '_' are emotes    
-  # if body[0].chr == '_' && body[body.length - 1].chr == '_'
-  #   chatroom_emote(msg, cl, state)
-  #   return
-  # end
+  # messages starting and ending with '_' are emotes    
+  if body[0].chr == '_' && body[body.length - 1].chr == '_'
+    chatroom_emote(msg, cl, state)
+    return
+  end
 
-  if(/bomb/.match(body))
-
+  # If someone says [word]bomb search for [word] on Google image
+  # search and post the first result to the room.
+  # eg: pugbomb
+  if /\w+bomb/.match(body)
     q = /(\w+)bomb/.match(body)[1]
-    uri = 'http://www.google.com/search?num=10&hl=en&safe=off&site=imghp&tbm=isch&source=hp&biw=1060&bih=669&q=' + q
+    uri = 'http://www.google.com/search?num=1&hl=en&safe=off&site=imghp&tbm=isch&source=hp&biw=1060&bih=669&q=' + q
     response = Net::HTTP.get_response(URI.parse(uri)) # => #<Net::HTTPOK 200 OK readbody=true>
     arr = response.body.scan(/imgurl=([^&,]+)/)
-
-    if arr.nil?
-      respond(msg, cl, "Bomb missed its target...!")
+    if arr.length < 1
+      respond(msg, cl, "No results for " + q)
     elsif
-      respond(msg, cl, arr.sample[0])
+      respond(msg, cl, arr[0][0])
     end
   end
 
