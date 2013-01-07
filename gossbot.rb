@@ -161,7 +161,7 @@ def regular_user_chatroom_message(msg, cl, state)
           (state[:kick_votes][kick_candidate_email] ||= Set.new).add(voter_email)
           vote_count = state[:kick_votes][kick_candidate_email].size
           if(vote_count >= REQUIRED_KICK_VOTES)
-            kick_user(kick_candidate_email)
+            kick_user(kick_candidate_email, msg, cl, state)
           else
             respond(msg, cl, "#{match[1]} needs #{REQUIRED_KICK_VOTES - vote_count} more vote(s) to be kicked.")
           end
