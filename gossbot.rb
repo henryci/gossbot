@@ -198,6 +198,20 @@ def regular_user_chatroom_message(msg, cl, state)
       return
     end
 
+     # If someone says [word]bomb search for [word] on Google image
+     # search and post the first result to the room. eg: pugbomb
+     if /\w+bomb/.match(body)
+       q = /(\w+)bomb/.match(body)[1]
+       uri = 'http://www.google.com/search?num=1&hl=en&safe=off&site=imghp&tbm=isch&source=hp&biw=1060&bih=669&q=' + q
+       response = Net::HTTP.get_response(URI.parse(uri)) # => #<Net::HTTPOK 200 OK readbody=true>
+       arr = response.body.scan(/imgurl=([^&,]+)/)
+       if arr.length < 1
+         respond(msg, cl, "No results for " + q)
+       elsif
+         respond(msg, cl, arr[0][0])
+       end
+     end
+
     # randomly emote or say things
     if rand(SPEAK_LIKELYHOOD) == 1
       respond(msg, cl, "/me #{EMOTES[rand(EMOTES.length)]} #{person}")
