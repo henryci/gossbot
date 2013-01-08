@@ -8,6 +8,7 @@ require 'rubygems'
 require 'time'
 require 'xmpp4r/client'
 require 'set'
+require 'net/http'
 include Jabber
 
 Thread.abort_on_exception=true
