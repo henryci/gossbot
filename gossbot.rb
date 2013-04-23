@@ -36,6 +36,9 @@ EXCLAMATIONS = ["Hi guys!", "This sure is a fun time."]
 # random actions, which get inserted into: "/me <EMOTE> <user>"
 EMOTES = ["smiles at", "waves at"]
 
+# people to use as the answer to 'who' questions
+PEOPLE = ["Test Person"]
+
 # number of kick votes a user needs before the bot kicks them
 REQUIRED_KICK_VOTES = 3
 
@@ -185,16 +188,22 @@ def regular_user_chatroom_message(msg, cl, state)
       return
     end
 
-    # answer "who is" questions
-    if (match = /^who is (.*)/.match(stmt))
+    # identify users
+    if (match = /^identify (.*)/.match(stmt))
       if(match.length > 0 && state[:user_map] && state[:user_map][match[1]])
         respond(msg, cl, "#{match[1]} is #{state[:user_map][match[1]]}")
         return
       end
     end
 
+    # answer who is questions
+    if (match = /^who (.*)/i.match(stmt))
+      person = PEOPLE[stmt.hash % (PEOPLE.length) +1]
+      respond(msg, cl, person)
+    end
+
     # answer "is" questions randomly
-    if (match = /is(.*)\?$/.match(stmt))
+    if (match = /is(.*)\?$/i.match(stmt))
       respond(msg, cl, stmt.hash % 2 == 0 ? "yes" : "no")
       return
     end
