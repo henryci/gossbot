@@ -64,14 +64,14 @@ def ask_omegle(question)
       end
     end
   end
+  out "omegle answer: #{answer.inspect}"
   if t.join(15)
-    out "returning answer after waiting for thread, answer #{answer}"
-    answer
+    out "omegle thread completed"
   else
-    out "no answer, timed out"
     t.kill
-    false
+    out "omegle thread timed out"
   end
+  (answer && answer !~ /^\s*$/) ? answer : false
 end
 
 # Responds to the sender of a message with a new message
@@ -120,18 +120,18 @@ end
 def chatroom_emote(msg, cl, state)
   body = msg.body.to_s
   body = body[1..body.length - 2]
-   
-  # Being invited back to a chat room: '_henry invited thisbot@gmail.com_' 
+
+  # Being invited back to a chat room: '_henry invited thisbot@gmail.com_'
   if(match = /^(.*) invited you to '#{ROOM_NAME}'/.match(body))
     out("coming back after being kicked")
     respond(msg, cl, "hello again")
     return
   end
 
-  # handle users being kicked     
+  # handle users being kicked
   if (match = /(\S*) kicked (\S*)/.match(body))
     out("User was kicked. match: #{match.inspect}")
-    kick_user(match[1], msg, cl, state)        
+    kick_user(match[1], msg, cl, state)
     invite_user(match[2], msg, cl, state)
   end
 end
@@ -228,6 +228,14 @@ def regular_user_chatroom_message(msg, cl, state)
       end
     end
 
+    # ask a question of Omegle
+    if (match = /^\s*Omegle\s*[:, ]\s*(.*)$/i.match(stmt))
+      question = match[1]
+      answer = ask_omegle(question) || "Sorry, no answer."
+      respond(msg, cl, answer)
+      return
+    end
+
     # answer who is questions
     if (match = /^who (.*)/i.match(stmt))
       person = PEOPLE[stmt.hash % (PEOPLE.length) +1]
@@ -238,15 +246,6 @@ def regular_user_chatroom_message(msg, cl, state)
     if (match = /is(.*)\?$/i.match(stmt))
       respond(msg, cl, stmt.hash % 2 == 0 ? "yes" : "no")
       return
-    end
-
-    # ask a question of Omegle
-    if (match = /^\s*Omegle\s*[:, ]\s*(.*)$/i.match(stmt))
-      question = match[1]
-      answer = ask_omegle(question)
-      if answer
-        respond(msg, cl, answer)
-      end
     end
 
      # If someone says [word]bomb search for [word] on Google image
@@ -268,14 +267,14 @@ def regular_user_chatroom_message(msg, cl, state)
       respond(msg, cl, "/me #{EMOTES[rand(EMOTES.length)]} #{person}")
     elsif(rand(SPEAK_LIKELYHOOD) == 1)
       respond(msg, cl, "#{EXCLAMATIONS[rand(EXCLAMATIONS.length)]}")
-    end    
+    end
   end
 end
 
 # called once for every message sent to the chatroom
 def chatroom_message(msg, cl, state)
   body = msg.body.to_s
-  
+
   # update room status every MSGS_UNTIL_REFRESH messages
   # Use a countdown and not mod to avoid skips happenning if multiple messages come at once
   if(state[:time_until_list] <= 0)
@@ -292,15 +291,15 @@ def chatroom_message(msg, cl, state)
        respond(msg, cl, "/list")
        return
   end
-  
+
   # handle /list result when it comes in
   if(/^Listing members of '#{ROOM_NAME}'\n/.match(body))
     out("received a room listing.")
     listing_refresh(state, body)
     return
-   end 
-  
-  # messages starting and ending with '_' are emotes    
+   end
+
+  # messages starting and ending with '_' are emotes
   if body[0].chr == '_' && body[body.length - 1].chr == '_'
     chatroom_emote(msg, cl, state)
     return
@@ -319,7 +318,7 @@ end
 def main
   settings = {}
   state = {}
-  
+
   if ARGV.length != 3
     puts "Run with ./gossbot.rb user@server/resource password <speak y/n>"
     exit 1
@@ -347,7 +346,7 @@ def main
       personal_message(msg, cl, state)
     end
   end
-  
+
   # sleep and let jabber thread wait for input
   mainthread = Thread.current
   Thread.stop
