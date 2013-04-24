@@ -92,7 +92,7 @@ def listing_refresh(state, body)
 end
 
 # an emote sent to the chatroom
-def chatroom_emote(msg, cl, state)
+def chatroom_emote(msg, cl, state, config)
   body = msg.body.to_s
   body = body[1..body.length - 2]
 
@@ -277,7 +277,7 @@ def chatroom_message(msg, cl, state, config)
 
   # messages starting and ending with '_' are config["emotes"]
   if body[0].chr == '_' && body[body.length - 1].chr == '_'
-    chatroom_emote(msg, cl, state)
+    chatroom_emote(msg, cl, state, config)
     return
   end
 
