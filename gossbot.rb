@@ -106,7 +106,7 @@ def chatroom_emote(msg, cl, state, config)
   # handle users being kicked
   if (match = /(\S*) kicked (\S*)/.match(body))
     out("User was kicked. match: #{match.inspect}")
-    kick_user(match[1], msg, cl, state)
+    kick_user(match[1], msg, cl, state, config)
     invite_user(match[2], msg, cl, state)
   end
 end
