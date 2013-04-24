@@ -1,4 +1,4 @@
-#!/usr/bin/ruby -d
+#!/usr/bin/env ruby -d
 
 # I am GossBot!
 # GossBot is a xmpp chat bot designed to live in a PartyChat (http://partychapp.appspot.com/) room
