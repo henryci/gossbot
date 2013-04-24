@@ -62,7 +62,6 @@ end
 
 # establishes and returns a jabber connection (throws an error on failure)
 def connect(config)
-  puts config.inspect
   myJID = JID.new(config["account"])
   myPassword = config["password"]
   cl = Client.new(myJID)
