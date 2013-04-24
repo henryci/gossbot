@@ -12,37 +12,11 @@ require 'net/http'
 gem     'romegle'
 require 'omegle'
 include Jabber
+require 'yaml'
 
-Thread.abort_on_exception=true
-
-# set this to the partychat room you wish to react to
-ROOM_NAME = "MyTestRoom"
-
-# list of aliases that do not get kicked. It is recommended
-# to have two bots in the room so a user can't kick the bot
-INVINCIBLE_ALIASES = ["gossbot", "gossbot2"]
-
-# enables console logging
 DEBUG_OUTPUT = false
 
-# Number of chat messages to receive that cause an refresh of
-# the bots user/email mapping
-MSGS_UNTIL_REFRESH = 50
-
-# chance of speaking randomly is rand(SPEAK_LIKELYHOOD) == 1
-SPEAK_LIKELYHOOD = 500
-
-# random things the bot can say based on SPEAK_LIKELYHOOD
-EXCLAMATIONS = ["Hi guys!", "This sure is a fun time."]
-
-# random actions, which get inserted into: "/me <EMOTE> <user>"
-EMOTES = ["smiles at", "waves at"]
-
-# people to use as the answer to 'who' questions
-PEOPLE = ["Test Person"]
-
-# number of kick votes a user needs before the bot kicks them
-REQUIRED_KICK_VOTES = 3
+Thread.abort_on_exception=true
 
 # ask a question of some random person on Omegle
 def ask_omegle(question)
@@ -87,9 +61,10 @@ def out(msg)
 end
 
 # establishes and returns a jabber connection (throws an error on failure)
-def connect(settings)
-  myJID = JID.new(settings[:jid])
-  myPassword = settings[:password]
+def connect(config)
+  puts config.inspect
+  myJID = JID.new(config["account"])
+  myPassword = config["password"]
   cl = Client.new(myJID)
   cl.connect
   cl.auth(myPassword)
@@ -122,7 +97,7 @@ def chatroom_emote(msg, cl, state)
   body = body[1..body.length - 2]
 
   # Being invited back to a chat room: '_henry invited thisbot@gmail.com_'
-  if(match = /^(.*) invited you to '#{ROOM_NAME}'/.match(body))
+  if(match = /^(.*) invited you to '#{config["room_name"]}'/.match(body))
     out("coming back after being kicked")
     respond(msg, cl, "hello again")
     return
@@ -136,8 +111,8 @@ def chatroom_emote(msg, cl, state)
   end
 end
 
-def kick_user(user, msg, cl, state)
-  return if (INVINCIBLE_ALIASES.index(user) != nil)
+def kick_user(user, msg, cl, state, config)
+  return if (config["invincible_aliases"].index(user) != nil)
 
   # determine if this is a username or email
   if (user.include?("@"))
@@ -166,8 +141,8 @@ def invite_user(user, msg, cl, state)
   end
 end
 
-def regular_user_chatroom_message(msg, cl, state)
-  return if !state[:do_speak] # some bots should be seen and not heard
+def regular_user_chatroom_message(msg, cl, state, config)
+  return if !config["do_speak"] # some bots should be seen and not heard
   body = msg.body.to_s
 
   if(match = /\[(\S*)\] (.*)/.match(body))
@@ -196,10 +171,10 @@ def regular_user_chatroom_message(msg, cl, state)
         if (kick_candidate_email && voter_email)
           (state[:kick_votes][kick_candidate_email] ||= Set.new).add(voter_email)
           vote_count = state[:kick_votes][kick_candidate_email].size
-          if(vote_count >= REQUIRED_KICK_VOTES)
-            kick_user(kick_candidate_email, msg, cl, state)
+          if(vote_count >= config["required_kick_votes"])
+            kick_user(kick_candidate_email, msg, cl, state, config)
           else
-            respond(msg, cl, "#{match[1]} needs #{REQUIRED_KICK_VOTES - vote_count} more vote(s) to be kicked.")
+            respond(msg, cl, "#{match[1]} needs #{config["required_kick_votes"] - vote_count} more vote(s) to be kicked.")
           end
         end
       end
@@ -214,7 +189,7 @@ def regular_user_chatroom_message(msg, cl, state)
         if (kick_candidate_email && voter_email)
           (state[:kick_votes][kick_candidate_email] ||= Set.new).delete(voter_email)
           vote_count = state[:kick_votes][kick_candidate_email].size
-          respond(msg, cl, "#{match[1]} needs #{REQUIRED_KICK_VOTES - vote_count} more votes to be kicked.")
+          respond(msg, cl, "#{match[1]} needs #{config["required_kick_votes"] - vote_count} more votes to be kicked.")
         end
       end
       return
@@ -238,8 +213,9 @@ def regular_user_chatroom_message(msg, cl, state)
 
     # answer who is questions
     if (match = /^who (.*)/i.match(stmt))
-      person = PEOPLE[stmt.hash % (PEOPLE.length) +1]
+      person = config["people"][stmt.hash % (config["people"].length) +1]
       respond(msg, cl, person)
+      return
     end
 
     # answer "is" questions randomly
@@ -263,23 +239,23 @@ def regular_user_chatroom_message(msg, cl, state)
      end
 
     # randomly emote or say things
-    if rand(SPEAK_LIKELYHOOD) == 1
-      respond(msg, cl, "/me #{EMOTES[rand(EMOTES.length)]} #{person}")
-    elsif(rand(SPEAK_LIKELYHOOD) == 1)
-      respond(msg, cl, "#{EXCLAMATIONS[rand(EXCLAMATIONS.length)]}")
+    if rand(config["speak_likelyhood"]) == 1
+      respond(msg, cl, "/me #{config["emotes"][rand(config["emotes"].length)]} #{person}")
+    elsif(rand(config["speak_likelyhood"]) == 1)
+      respond(msg, cl, "#{config["exclamations"][rand(config["exclamations"].length)]}")
     end
   end
 end
 
 # called once for every message sent to the chatroom
-def chatroom_message(msg, cl, state)
+def chatroom_message(msg, cl, state, config)
   body = msg.body.to_s
 
-  # update room status every MSGS_UNTIL_REFRESH messages
+  # update room status every config["msgs_until_refresh"] messages
   # Use a countdown and not mod to avoid skips happenning if multiple messages come at once
   if(state[:time_until_list] <= 0)
     respond(msg, cl, "/list")
-    state[:time_until_list] = MSGS_UNTIL_REFRESH
+    state[:time_until_list] = config["msgs_until_refresh"]
   else
     state[:time_until_list] -= 1
   end
@@ -293,57 +269,54 @@ def chatroom_message(msg, cl, state)
   end
 
   # handle /list result when it comes in
-  if(/^Listing members of '#{ROOM_NAME}'\n/.match(body))
+  if(/^Listing members of '#{config["room_name"]}'\n/.match(body))
     out("received a room listing.")
     listing_refresh(state, body)
     return
    end
 
-  # messages starting and ending with '_' are emotes
+  # messages starting and ending with '_' are config["emotes"]
   if body[0].chr == '_' && body[body.length - 1].chr == '_'
     chatroom_emote(msg, cl, state)
     return
   end
 
   # getting here means the message was a regular comment from a user
-  regular_user_chatroom_message(msg, cl, state)
+  regular_user_chatroom_message(msg, cl, state, config)
 end
 
 # called once for every message sent directly
-def personal_message(msg, cl, state)
+def personal_message(msg, cl)
   respond(msg, cl, "Hi. Your message was: #{msg.inspect}")
   respond(msg, cl, "Body: #{msg.body.to_s}")
 end
 
 def main
-  settings = {}
-  state = {}
 
-  if ARGV.length != 3
-    puts "Run with ./gossbot.rb user@server/resource password <speak y/n>"
-    exit 1
+  if ARGV.length < 1
+    puts "Usage: ./gossbot <config_file>"
+    exit
   end
-  settings[:jid] = ARGV[0]
-  settings[:password] = ARGV[1]
-  settings[:do_speak] = ARGV[2] && ARGV[2].downcase == "y"
-  out("Gossbot launched with settings: #{settings.inspect}")
 
+  config = YAML.load_file(ARGV[0])
+  out("Gossbot launched with config: #{config.inspect}")
+
+  state = {}
   state[:time_until_list] = 0
   state[:user_map] = {}
   state[:kick_votes] = {}
-  state[:do_speak] = settings[:do_speak]
 
-  cl = connect(settings)
+  cl = connect(config)
 
   # what to do when a message is received
   cl.add_message_callback do |msg|
     out "message: #{msg.inspect}" # this won't output the message body
     if msg.type == :error
       out("ERROR: #{msg.inspect}")
-    elsif(msg.from.to_s.include?(ROOM_NAME))
-      chatroom_message(msg, cl, state)
+    elsif(msg.from.to_s.include?(config["room_name"]))
+      chatroom_message(msg, cl, state, config)
     else
-      personal_message(msg, cl, state)
+      personal_message(msg, cl)
     end
   end
 
@@ -354,3 +327,4 @@ def main
 end
 
 main
+

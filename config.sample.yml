@@ -1,0 +1,11 @@
+account: "somechatbot@gmail.com"
+password: "SomeSecretPassword"
+do_speak: true
+room_name: "OurChatRoom"
+invincible_aliases: ["ThisBot"]
+msgs_until_refresh: 50
+speak_likelyhood: 100
+exclamations: ["I like things.", "Will you be my friend?"]
+emotes: ["loves", "waves at", "hugs", "really likes", "is amused by", "giggles at"]
+people: ["Bob", "John", "Larry", "Susan"]
+required_kick_votes: 3
