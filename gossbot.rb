@@ -9,6 +9,8 @@ require 'time'
 require 'xmpp4r/client'
 require 'set'
 require 'net/http'
+gem     'romegle'
+require 'omegle'
 include Jabber
 
 Thread.abort_on_exception=true
@@ -41,6 +43,36 @@ PEOPLE = ["Test Person"]
 
 # number of kick votes a user needs before the bot kicks them
 REQUIRED_KICK_VOTES = 3
+
+# ask a question of some random person on Omegle
+def ask_omegle(question)
+  answer = false
+  msg    = "Hello stranger. #{question}"
+  t = Thread.new do
+    Omegle.start() do |omegle|
+      out "asking omegle '#{msg}' ..."
+      omegle.send(msg)
+      omegle.listen do |type, data|
+        out "type: #{type}, data: #{data}"
+        case type
+        when 'gotMessage'
+          omegle.send('Thanks!')
+          omegle.disconnect
+          out "got answer from omegle inside thread: #{data}"
+          answer = data
+        end
+      end
+    end
+  end
+  if t.join(15)
+    out "returning answer after waiting for thread, answer #{answer}"
+    answer
+  else
+    out "no answer, timed out"
+    t.kill
+    false
+  end
+end
 
 # Responds to the sender of a message with a new message
 def respond(m, cl, msg)
@@ -206,6 +238,15 @@ def regular_user_chatroom_message(msg, cl, state)
     if (match = /is(.*)\?$/i.match(stmt))
       respond(msg, cl, stmt.hash % 2 == 0 ? "yes" : "no")
       return
+    end
+
+    # ask a question of Omegle
+    if (match = /^\s*Omegle\s*[:, ]\s*(.*)$/i.match(stmt))
+      question = match[1]
+      answer = ask_omegle(question)
+      if answer
+        respond(msg, cl, answer)
+      end
     end
 
      # If someone says [word]bomb search for [word] on Google image
