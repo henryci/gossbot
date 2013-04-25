@@ -1,6 +1,7 @@
 GEM
   remote: https://rubygems.org/
   specs:
+    json (1.7.7)
     romegle (0.1.1)
     xmpp4r (0.5)
 
@@ -8,5 +9,6 @@ PLATFORMS
   ruby
 
 DEPENDENCIES
+  json
   romegle
   xmpp4r
