@@ -1,3 +1,6 @@
+# Sample config file
+# change to suit your environment
+
 account: "somechatbot@gmail.com"
 password: "SomeSecretPassword"
 do_speak: true
@@ -10,5 +13,6 @@ emotes: ["loves", "waves at", "hugs", "really likes", "is amused by", "giggles a
 people: ["Bob", "John", "Larry", "Susan"]
 required_kick_votes: 3
 debug: false
-omegle:
-  question_timeout: 20
+ask_omegle:
+  timeout: 20
+  retry:    3

@@ -10,7 +10,6 @@ require 'time'
 require 'xmpp4r/client'
 require 'set'
 require 'net/http'
-gem     'romegle'
 require 'omegle'
 require 'yaml'
 require 'thread'
@@ -41,6 +40,7 @@ class OmegleChat
             send_to_callback(:disconnected)
         end
       end
+      out "omegle listen loop terminated"
     end
   end
 
@@ -57,15 +57,19 @@ class OmegleChat
     @callback.call(self, type, data)
   end
 
+  def connected?
+    @omegle && @omegle.connected?
+  end
+
   def close
-    if @receive_thread
-      @receive_thread.kill
-      @receive_thread = nil
-    end
     if @omegle
-      @omegle.disconnect
+      @omegle.disconnect rescue nil
       @omegle = nil
     end
+  end
+
+  def closed?
+    nil == @receive_thread && nil == @omegle
   end
 end
 
@@ -256,19 +260,26 @@ def regular_user_chatroom_message(msg, cl, state, config)
 
     # summon Omegler
     if (stmt =~ /^\s*O(megle)?\s+O(megle)?\s+O(megle)?\s*$/i)
-      close_omegle_chat(msg, cl, state)
-      respond(msg, cl, "Summoning Omegler!")
+      current_chat = state[:omegle_chat]
+      if current_chat && !current_chat.closed?
+        respond(msg, cl, "Kicking previous omegler!")
+        current_chat.close()
+      end
+      respond(msg, cl, "Summoning omegler!")
       state[:omegle_chat] = OmegleChat.new do |chat, type, data|
         case type
         when :message
+          out "omegle message seen callback"
           respond(msg, cl, "Omegler says: #{data}")
         when :disconnected
+          out "omegle disconnect seen callback"
           chat.close()
           state.delete(:omegle_chat)
           respond(msg, cl, "Omegler vanished.")
         end
       end
-      respond(msg, cl, "Talk to Omegler by saying \"O: ...\"")
+      respond(msg, cl, 'Omegler summoned. See commands with "omegle help".')
+      return
     end
 
     # Say something to Omegler
@@ -277,22 +288,50 @@ def regular_user_chatroom_message(msg, cl, state, config)
       if omegle_chat
         something = match[1]
         omegle_chat.say(something)
+      else
+        respond(msg, cl, "No omegler present.")
       end
       return
     end
 
     # Banish Omegler
-    if (match = /^\s*banish\s+o(megle)?\s*$/i.match(stmt))
-      respond(msg, cl, "Banishing Omegler!")
+    if (match = /^\s*banish\s+o(megle(r)?)?\s*$/i.match(stmt))
+      respond(msg, cl, "Banishing omegler!")
       state[:omegle_chat].close() if state[:omegle_chat]
       state.delete(:omegle_chat)
+      return
+    end
+
+    # Get Omegle chat status
+    if (match = /^\s*omegle\s+status\s*$/i.match(stmt))
+      chat         = state[:omegle_chat]
+      is_connected = chat ? chat.connected? : false
+      respond(msg, cl, "Omegle status: state? #{!!chat}, connected? #{is_connected}")
+      return
+    end
+
+    # Get Omegle help
+    if (match = /^\s*omegle\s+help\s*$/i.match(stmt))
+      help = [
+        'Summon omegler by saying "o o o".',
+        'Banish omegler by saying "banish omegler".',
+        'Get connection status by saying "omegle status".'
+      ].join("\n")
+      respond(msg, cl, help)
       return
     end
 
     # ask a question of Omegle
     if (match = /^\s*Omegle\s*[:,]\s*(.*)$/i.match(stmt))
       question = match[1]
-      answer = ask_omegle(question, config['omegle']['question_timeout']) || "Sorry, no answer."
+      answer   = false
+      attempt  = 0
+      timeout  = config['ask_omegle']['timeout']
+      retry_n  = config['ask_omegle']['retry']
+      while !answer && attempt < retry_n
+        attempt += 1
+        answer   = ask_omegle(question, timeout)
+      end
       respond(msg, cl, answer)
       return
     end
