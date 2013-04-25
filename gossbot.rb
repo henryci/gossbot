@@ -1,27 +1,78 @@
-#!/usr/bin/env ruby -d
+#!/usr/bin/env ruby
 
 # I am GossBot!
 # GossBot is a xmpp chat bot designed to live in a PartyChat (http://partychapp.appspot.com/) room
 # GossBot reinvites anybody who has been kicked (and kicks the kicker), answers questions, and occassionally speaks
 
 require 'rubygems'
+require 'bundler/setup'
 require 'time'
 require 'xmpp4r/client'
 require 'set'
 require 'net/http'
 gem     'romegle'
 require 'omegle'
-include Jabber
 require 'yaml'
-
-DEBUG_OUTPUT = false
+require 'thread'
+include Jabber
 
 Thread.abort_on_exception=true
+DEBUG_OUTPUT = {:enabled => false}
+
+class OmegleChat
+  def initialize(&callback)
+    out "entering omegle chat..."
+    @callback         = callback
+    @omegle           = Omegle.new
+    @omegle.start
+    spawn_receive_loop()
+  end
+
+  def spawn_receive_loop
+    @receive_thread = Thread.new do
+      @omegle.listen do |type, data|
+        out "omegle listen received type: #{type}, data: #{data}"
+        case type
+          when 'gotMessage'
+            out "omegle message, sending to callback: #{data}"
+            send_to_callback(:message, data)
+          when 'strangerDisconnected'
+            out "omegle disconnected"
+            send_to_callback(:disconnected)
+        end
+      end
+    end
+  end
+
+  def say(str)
+    out "sending to omegle chat #{str}"
+    begin
+      @omegle.send(str)
+    rescue => e
+      out "exception sending to omegle, #{e.class}, #{e.message}"
+    end
+  end
+
+  def send_to_callback(type, data = nil)
+    @callback.call(self, type, data)
+  end
+
+  def close
+    if @receive_thread
+      @receive_thread.kill
+      @receive_thread = nil
+    end
+    if @omegle
+      @omegle.disconnect
+      @omegle = nil
+    end
+  end
+end
 
 # ask a question of some random person on Omegle
-def ask_omegle(question)
+def ask_omegle(question, timeout)
   answer = false
-  msg    = "Hello stranger. #{question}"
+  msg    = question
   t = Thread.new do
     Omegle.start() do |omegle|
       out "asking omegle '#{msg}' ..."
@@ -38,13 +89,14 @@ def ask_omegle(question)
       end
     end
   end
-  out "omegle answer: #{answer.inspect}"
-  if t.join(15)
+  out "waiting #{timeout} seconds for answer from omegle"
+  if t.join(timeout)
     out "omegle thread completed"
   else
     t.kill
     out "omegle thread timed out"
   end
+  out "omegle answer: #{answer.inspect}"
   (answer && answer !~ /^\s*$/) ? answer : false
 end
 
@@ -57,7 +109,7 @@ end
 
 # output to the local console for debugging / information
 def out(msg)
-  puts "#{Time.now.strftime("%Y-%m-%d %H:%M:%S")} #{msg}" if DEBUG_OUTPUT
+  puts "#{Time.now.strftime("%Y-%m-%d %H:%M:%S")} #{msg}" if DEBUG_OUTPUT[:enabled]
 end
 
 # establishes and returns a jabber connection (throws an error on failure)
@@ -202,10 +254,45 @@ def regular_user_chatroom_message(msg, cl, state, config)
       end
     end
 
+    # summon Omegler
+    if (stmt =~ /^\s*O(megle)?\s+O(megle)?\s+O(megle)?\s*$/i)
+      close_omegle_chat(msg, cl, state)
+      respond(msg, cl, "Summoning Omegler!")
+      state[:omegle_chat] = OmegleChat.new do |chat, type, data|
+        case type
+        when :message
+          respond(msg, cl, "Omegler says: #{data}")
+        when :disconnected
+          chat.close()
+          state.delete(:omegle_chat)
+          respond(msg, cl, "Omegler vanished.")
+        end
+      end
+      respond(msg, cl, "Talk to Omegler by saying \"O: ...\"")
+    end
+
+    # Say something to Omegler
+    if (match = /^\s*O\s*:\s*(.*)$/i.match(stmt))
+      omegle_chat = state[:omegle_chat]
+      if omegle_chat
+        something = match[1]
+        omegle_chat.say(something)
+      end
+      return
+    end
+
+    # Banish Omegler
+    if (match = /^\s*banish\s+o(megle)?\s*$/i.match(stmt))
+      respond(msg, cl, "Banishing Omegler!")
+      state[:omegle_chat].close() if state[:omegle_chat]
+      state.delete(:omegle_chat)
+      return
+    end
+
     # ask a question of Omegle
-    if (match = /^\s*Omegle\s*[:, ]\s*(.*)$/i.match(stmt))
+    if (match = /^\s*Omegle\s*[:,]\s*(.*)$/i.match(stmt))
       question = match[1]
-      answer = ask_omegle(question) || "Sorry, no answer."
+      answer = ask_omegle(question, config['omegle']['question_timeout']) || "Sorry, no answer."
       respond(msg, cl, answer)
       return
     end
@@ -298,6 +385,8 @@ def main
   end
 
   config = YAML.load_file(ARGV[0])
+  DEBUG_OUTPUT[:enabled] = config['debug']
+  out("RUBY_PLATFORM: #{RUBY_PLATFORM}")
   out("Gossbot launched with config: #{config.inspect}")
 
   state = {}
