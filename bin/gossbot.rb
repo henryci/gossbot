@@ -373,6 +373,7 @@ class Gossbot
               end
             when :disconnected
               chat.close()
+            end
           end
           chat.say(question)
           chat.receive_thread.join(timeout)
