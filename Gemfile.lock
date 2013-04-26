@@ -2,13 +2,17 @@ GEM
   remote: https://rubygems.org/
   specs:
     json (1.7.7)
+    json (1.7.7-java)
+    rake (10.0.4)
     romegle (0.1.1)
     xmpp4r (0.5)
 
 PLATFORMS
+  java
   ruby
 
 DEPENDENCIES
   json
+  rake
   romegle
   xmpp4r
